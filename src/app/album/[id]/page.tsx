@@ -1,20 +1,35 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { Play, Shuffle, Clock, Music2 } from 'lucide-react';
 import Image from 'next/image';
 import TopBar from '@/components/layout/TopBar';
 import SongRow from '@/components/ui/SongRow';
 import DynamicBackground from '@/components/ui/DynamicBackground';
 import { usePlayerStore } from '@/store/playerStore';
-import { songs as allSongs } from '@/data/songs';
+import { songs as staticSongs } from '@/data/songs';
+import { getSongs } from '@/lib/songService';
+import { isSupabaseConfigured } from '@/lib/supabase';
+import type { Song } from '@/types';
 
 export default function AlbumPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const { playQueue, toggleShuffle } = usePlayerStore();
+  const [allSongs, setAllSongs] = useState<Song[]>(staticSongs);
 
-  // Build album from songs data (no external DB required)
-  const albumSongs = useMemo(() => allSongs.filter((s) => s.album === id || s.album === decodeURIComponent(id)), [id]);
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    getSongs().then((dbSongs) => {
+      const dbIds = new Set(dbSongs.map((s) => s.id));
+      setAllSongs([...dbSongs, ...staticSongs.filter((s) => !dbIds.has(s.id))]);
+    }).catch(() => {});
+  }, []);
+
+  // Build album from songs data
+  const albumSongs = useMemo(
+    () => allSongs.filter((s) => s.album === id || s.album === decodeURIComponent(id)),
+    [id, allSongs]
+  );
   const meta = albumSongs[0];
 
   if (!meta) {

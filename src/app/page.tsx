@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Play, TrendingUp, Clock, Music2, ChevronRight } from 'lucide-react';
+import { Play, TrendingUp, Clock, Music2, ChevronRight, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -10,7 +10,7 @@ import SongCard from '@/components/cards/SongCard';
 import PlaylistCard from '@/components/cards/PlaylistCard';
 import { usePlayerStore } from '@/store/playerStore';
 import { useLibraryStore } from '@/store/libraryStore';
-import { songs as allSongs } from '@/data/songs';
+import { useSupabaseSongs } from '@/hooks/useSupabaseSongs';
 import type { Song } from '@/types';
 
 const GREETINGS = ['Good morning', 'Good afternoon', 'Good evening'];
@@ -23,11 +23,13 @@ const GENRE_COLORS: Record<string, string> = {
   'Chill':       'from-teal-700  to-cyan-900',
   'Fusion':      'from-purple-800 to-fuchsia-900',
   'Lo-Fi':       'from-slate-700  to-gray-900',
+  'Bollywood':   'from-orange-700 to-red-900',
+  'Pop':         'from-pink-700   to-rose-900',
+  'Classical':   'from-emerald-700 to-green-900',
 };
 
 function QuickPlayCard({ song, queue }: { song: Song; queue: Song[] }) {
-  const { playSong, currentSong, isPlaying } = usePlayerStore();
-  const active = currentSong?.id === song.id;
+  const { playSong } = usePlayerStore();
   return (
     <motion.button
       whileHover={{ scale: 1.02 }}
@@ -46,7 +48,9 @@ function QuickPlayCard({ song, queue }: { song: Song; queue: Song[] }) {
   );
 }
 
-function SectionHeader({ title, href, icon: Icon }: { title: string; href?: string; icon?: React.ElementType }) {
+function SectionHeader({ title, href, icon: Icon }: {
+  title: string; href?: string; icon?: React.ElementType;
+}) {
   return (
     <div className="flex items-center justify-between mb-5">
       <div className="flex items-center gap-2">
@@ -54,7 +58,8 @@ function SectionHeader({ title, href, icon: Icon }: { title: string; href?: stri
         <h2 className="section-title">{title}</h2>
       </div>
       {href && (
-        <Link href={href} className="text-xs font-semibold text-vs-gray hover:text-vs-white transition-colors flex items-center gap-1">
+        <Link href={href}
+          className="text-xs font-semibold text-vs-gray hover:text-vs-white transition-colors flex items-center gap-1">
           Show all <ChevronRight className="h-3.5 w-3.5" />
         </Link>
       )}
@@ -64,12 +69,13 @@ function SectionHeader({ title, href, icon: Icon }: { title: string; href?: stri
 
 export default function Home() {
   const { playQueue } = usePlayerStore();
-  const { recentlyPlayed, playlists, likedSongs } = useLibraryStore();
+  const { recentlyPlayed, playlists } = useLibraryStore();
+  const { songs: allSongs, dbSongs, isLoading } = useSupabaseSongs();
 
-  const featured  = allSongs.slice(0, 6);
-  const trending  = useMemo(() => [...allSongs].sort(() => Math.random() - 0.5).slice(0, 8), []);
-  const tamilSongs = useMemo(() => allSongs.filter((s) => s.language === 'Tamil'), []);
-  const recent    = recentlyPlayed.length > 0 ? recentlyPlayed.slice(0, 6) : allSongs.slice(4, 10);
+  const featured   = allSongs.slice(0, 6);
+  const trending   = useMemo(() => [...allSongs].sort(() => Math.random() - 0.5).slice(0, 8), [allSongs]);
+  const tamilSongs = useMemo(() => allSongs.filter((s) => s.language === 'Tamil'), [allSongs]);
+  const recent     = recentlyPlayed.length > 0 ? recentlyPlayed.slice(0, 6) : allSongs.slice(4, 10);
 
   const genres = useMemo(() => {
     const map: Record<string, Song[]> = {};
@@ -78,7 +84,7 @@ export default function Home() {
       map[s.genre].push(s);
     });
     return Object.entries(map).filter(([, arr]) => arr.length >= 2).slice(0, 8);
-  }, []);
+  }, [allSongs]);
 
   return (
     <div className="fade-up">
@@ -86,7 +92,15 @@ export default function Home() {
 
       {/* ── Hero ──────────────────────────────────────── */}
       <div className="bg-gradient-to-b from-[#535353]/40 to-transparent px-6 pt-6 pb-8">
-        <h1 className="text-3xl font-black text-vs-white mb-6">{greeting} 👋</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-black text-vs-white">{greeting} 👋</h1>
+          {isLoading && (
+            <div className="flex items-center gap-2 text-vs-gray text-xs">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Syncing…
+            </div>
+          )}
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {featured.map((song) => (
             <QuickPlayCard key={song.id} song={song} queue={featured} />
@@ -95,6 +109,19 @@ export default function Home() {
       </div>
 
       <div className="px-6 space-y-10 pb-10">
+
+        {/* ── Supabase songs (if any) ───────────────────── */}
+        {dbSongs.length > 0 && (
+          <section>
+            <SectionHeader title="🎵 From Your Library" icon={Music2} />
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              {dbSongs.slice(0, 12).map((song) => (
+                <SongCard key={song.id} song={song} queue={dbSongs} />
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* ── Your playlists ────────────────────────────── */}
         {playlists.length > 0 && (
           <section>
@@ -108,14 +135,16 @@ export default function Home() {
         )}
 
         {/* ── Recently played ───────────────────────────── */}
-        <section>
-          <SectionHeader title="Recently Played" icon={Clock} />
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {recent.map((song) => (
-              <SongCard key={song.id} song={song} queue={recent} />
-            ))}
-          </div>
-        </section>
+        {recent.length > 0 && (
+          <section>
+            <SectionHeader title="Recently Played" icon={Clock} />
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              {recent.map((song) => (
+                <SongCard key={song.id} song={song} queue={recent} />
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ── Trending ──────────────────────────────────── */}
         <section>
@@ -146,7 +175,8 @@ export default function Home() {
                 <Music2 className="h-5 w-5 text-vs-green" />
                 <h2 className="section-title">Tamil Hits 🎵</h2>
               </div>
-              <button onClick={() => playQueue(tamilSongs)} className="text-xs font-semibold text-vs-gray hover:text-vs-white transition-colors flex items-center gap-1">
+              <button onClick={() => playQueue(tamilSongs)}
+                className="text-xs font-semibold text-vs-gray hover:text-vs-white transition-colors flex items-center gap-1">
                 <Play className="h-3.5 w-3.5 fill-current" /> Play all
               </button>
             </div>
@@ -162,16 +192,18 @@ export default function Home() {
         <section>
           <SectionHeader title="Browse by Genre" />
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {genres.map(([genre, songs]) => (
+            {genres.map(([genre, genreSongs]) => (
               <motion.button
                 key={genre}
                 whileHover={{ scale: 1.04 }}
                 whileTap={{ scale: 0.96 }}
-                onClick={() => playQueue(songs)}
-                className={`relative h-28 rounded-2xl overflow-hidden bg-gradient-to-br ${GENRE_COLORS[genre] ?? 'from-gray-700 to-gray-900'} p-4 text-left`}
+                onClick={() => playQueue(genreSongs)}
+                className={`relative h-28 rounded-2xl overflow-hidden bg-gradient-to-br ${
+                  GENRE_COLORS[genre] ?? 'from-gray-700 to-gray-900'
+                } p-4 text-left`}
               >
                 <p className="font-black text-lg text-vs-white leading-tight">{genre}</p>
-                <p className="text-sm text-vs-white/70 mt-0.5">{songs.length} songs</p>
+                <p className="text-sm text-vs-white/70 mt-0.5">{genreSongs.length} songs</p>
                 <div className="absolute bottom-0 right-0 h-16 w-16 rounded-tl-2xl bg-white/10" />
               </motion.button>
             ))}

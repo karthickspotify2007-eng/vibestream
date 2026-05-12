@@ -1,23 +1,33 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { Play, Shuffle, Music2 } from 'lucide-react';
-import Image from 'next/image';
 import TopBar from '@/components/layout/TopBar';
 import SongRow from '@/components/ui/SongRow';
 import DynamicBackground from '@/components/ui/DynamicBackground';
 import { usePlayerStore } from '@/store/playerStore';
-import { songs as allSongs } from '@/data/songs';
+import { songs as staticSongs } from '@/data/songs';
+import { getSongs } from '@/lib/songService';
+import { isSupabaseConfigured } from '@/lib/supabase';
+import type { Song } from '@/types';
 
 export default function ArtistPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const { playQueue, toggleShuffle } = usePlayerStore();
+  const [allSongs, setAllSongs] = useState<Song[]>(staticSongs);
 
-  // Decode id — could be artist name or artist id
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    getSongs().then((dbSongs) => {
+      const dbIds = new Set(dbSongs.map((s) => s.id));
+      setAllSongs([...dbSongs, ...staticSongs.filter((s) => !dbIds.has(s.id))]);
+    }).catch(() => {});
+  }, []);
+
   const artistName = decodeURIComponent(id);
   const artistSongs = useMemo(
     () => allSongs.filter((s) => s.artist === artistName || s.artist === id),
-    [id, artistName]
+    [id, artistName, allSongs]
   );
   const meta = artistSongs[0];
 
@@ -42,7 +52,9 @@ export default function ArtistPage({ params }: { params: { id: string } }) {
           <TopBar />
           <p className="text-xs text-vs-white/70 uppercase tracking-widest font-semibold mb-1">Artist</p>
           <h1 className="text-4xl sm:text-5xl font-black text-vs-white">{meta.artist}</h1>
-          <p className="text-sm text-vs-gray mt-1">{artistSongs.length} songs · {genres.join(', ')}</p>
+          <p className="text-sm text-vs-gray mt-1">
+            {artistSongs.length} songs · {genres.filter(Boolean).join(', ')}
+          </p>
         </div>
       </div>
 

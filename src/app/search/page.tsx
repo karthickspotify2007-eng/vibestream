@@ -1,14 +1,18 @@
 'use client';
 
-import { useState, useMemo, useRef, useEffect, Suspense } from 'react';
+import { useState, useMemo, useRef, useEffect, Suspense, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Search, X, Clock, TrendingUp, Music2, Mic2 } from 'lucide-react';
+import { Search, X, Clock, TrendingUp, Music2, Mic2, Database } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Link from 'next/link';
 import TopBar from '@/components/layout/TopBar';
 import SongRow from '@/components/ui/SongRow';
 import { usePlayerStore } from '@/store/playerStore';
-import { songs as allSongs } from '@/data/songs';
+import { useLibraryStore } from '@/store/libraryStore';
+import { useSupabaseSongs } from '@/hooks/useSupabaseSongs';
+import { searchSongs } from '@/lib/songService';
 import { debounce } from '@/lib/utils';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import type { Song } from '@/types';
 
 const GENRE_CARDS = [
@@ -27,10 +31,17 @@ function SearchContent() {
   const [query, setQuery]           = useState(params?.get('q') ?? '');
   const [debouncedQ, setDebouncedQ] = useState(params?.get('q') ?? '');
   const [history, setHistory]       = useState<string[]>([]);
+  const [dbResults, setDbResults]   = useState<{
+    songs: Song[]; artists: { id: string; name: string }[]; albums: { id: string; title: string }[];
+  }>({ songs: [], artists: [], albums: [] });
+  const [searchingDb, setSearchingDb] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const { playQueue } = usePlayerStore();
+  const { localSongs } = useLibraryStore();
+  const { songs: allSongs } = useSupabaseSongs();
 
-  const updateDebounced = useMemo(() => debounce((v: string) => setDebouncedQ(v), 200), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const updateDebounced = useCallback(debounce((v: string) => setDebouncedQ(v), 250), []);
 
   useEffect(() => {
     try {
@@ -39,6 +50,22 @@ function SearchContent() {
     } catch {}
     inputRef.current?.focus();
   }, []);
+
+  // Search Supabase when debounced query changes
+  useEffect(() => {
+    if (!debouncedQ.trim() || !isSupabaseConfigured()) return;
+    setSearchingDb(true);
+    searchSongs(debouncedQ)
+      .then((res) => {
+        setDbResults({
+          songs: res.songs,
+          artists: res.artists.map((a) => ({ id: a.id, name: a.name })),
+          albums: res.albums.map((al) => ({ id: al.id, title: (al as { title: string }).title })),
+        });
+      })
+      .catch(() => {})
+      .finally(() => setSearchingDb(false));
+  }, [debouncedQ]);
 
   const saveQuery = (q: string) => {
     const trimmed = q.trim();
@@ -60,30 +87,56 @@ function SearchContent() {
 
   const handleChange = (v: string) => { setQuery(v); updateDebounced(v); };
 
-  const results = useMemo(() => {
+  // Client-side search across all songs + local songs
+  const localResults = useMemo(() => {
     const q = debouncedQ.toLowerCase().trim();
-    if (!q) return { songs: [], artists: [] };
-    const songs = allSongs.filter((s) =>
+    if (!q) return { songs: [] as Song[], artists: [] as { name: string; songs: Song[] }[] };
+
+    // Combine allSongs (static + DB) with local songs for unified search
+    const combined: Song[] = [
+      ...allSongs,
+      ...localSongs.map((ls) => ({ ...ls, isLocal: true as const })),
+    ];
+
+    const songs = combined.filter((s) =>
       s.title.toLowerCase().includes(q) ||
       s.artist.toLowerCase().includes(q) ||
-      s.genre.toLowerCase().includes(q) ||
+      (s.genre ?? '').toLowerCase().includes(q) ||
       (s.album ?? '').toLowerCase().includes(q)
     );
-    const artistSet = new Set<string>();
-    const artists: { name: string; songs: Song[] }[] = [];
+
+    // Extract unique artists from song results
+    const artistMap = new Map<string, Song[]>();
     songs.forEach((s) => {
-      if (!artistSet.has(s.artist)) {
-        artistSet.add(s.artist);
-        artists.push({ name: s.artist, songs: allSongs.filter((x) => x.artist === s.artist) });
-      }
+      if (!artistMap.has(s.artist)) artistMap.set(s.artist, []);
+      artistMap.get(s.artist)!.push(s);
     });
-    return { songs, artists: artists.slice(0, 4) };
-  }, [debouncedQ]);
+
+    return {
+      songs,
+      artists: Array.from(artistMap.entries())
+        .map(([name, songs]) => ({ name, songs }))
+        .slice(0, 5),
+    };
+  }, [debouncedQ, allSongs, localSongs]);
+
+  // Merge DB results with client results (deduplicate by ID)
+  const mergedSongs = useMemo(() => {
+    if (!debouncedQ.trim()) return [];
+    const seen = new Set<string>();
+    const all = [...dbResults.songs, ...localResults.songs];
+    return all.filter((s) => {
+      if (seen.has(s.id)) return false;
+      seen.add(s.id);
+      return true;
+    });
+  }, [dbResults.songs, localResults.songs, debouncedQ]);
 
   return (
     <div className="fade-up min-h-screen">
       <TopBar title="Search" />
       <div className="px-6 py-6 space-y-8">
+
         {/* Search input */}
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-vs-gray pointer-events-none" />
@@ -92,14 +145,18 @@ function SearchContent() {
             value={query}
             onChange={(e) => handleChange(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && saveQuery(query)}
-            placeholder="Artists, songs, or podcasts"
+            placeholder="Artists, songs, albums, genres…"
             className="w-full bg-[#242424] text-vs-white placeholder-vs-gray rounded-full py-3.5 pl-11 pr-11 text-sm focus:outline-none focus:ring-2 focus:ring-vs-green"
           />
           <AnimatePresence>
             {query && (
               <motion.button
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                onClick={() => { setQuery(''); setDebouncedQ(''); inputRef.current?.focus(); }}
+                onClick={() => {
+                  setQuery(''); setDebouncedQ('');
+                  setDbResults({ songs: [], artists: [], albums: [] });
+                  inputRef.current?.focus();
+                }}
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-vs-gray hover:text-vs-white transition-colors"
               >
                 <X className="h-4 w-4" />
@@ -110,25 +167,40 @@ function SearchContent() {
 
         <AnimatePresence mode="wait">
           {debouncedQ ? (
-            <motion.div key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
-              {results.songs.length === 0 && (
-                <div className="text-center py-20">
-                  <Music2 className="h-12 w-12 text-vs-gray mx-auto mb-4" />
-                  <p className="text-vs-white font-bold text-xl">No results for &quot;{debouncedQ}&quot;</p>
-                  <p className="text-vs-gray text-sm mt-1">Check the spelling or try different keywords.</p>
-                </div>
+            <motion.div key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="space-y-8">
+
+              {/* DB artists */}
+              {dbResults.artists.length > 0 && (
+                <section>
+                  <div className="flex items-center gap-2 mb-4">
+                    <Database className="h-4 w-4 text-vs-green" />
+                    <h2 className="section-title">Artists</h2>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {dbResults.artists.map(({ id, name }) => (
+                      <Link key={id} href={`/artist/${encodeURIComponent(name)}`}>
+                        <motion.span whileHover={{ scale: 1.04 }}
+                          className="flex items-center gap-2.5 bg-vs-elevated hover:bg-vs-hover rounded-full px-4 py-2 transition-colors cursor-pointer">
+                          <Mic2 className="h-4 w-4 text-vs-green" />
+                          <span className="text-sm font-semibold text-vs-white">{name}</span>
+                        </motion.span>
+                      </Link>
+                    ))}
+                  </div>
+                </section>
               )}
 
-              {/* Artists */}
-              {results.artists.length > 0 && (
+              {/* Local artists (from client-side search) */}
+              {localResults.artists.length > 0 &&
+                !dbResults.artists.some((a) => localResults.artists.find((la) => la.name === a.name)) && (
                 <section>
                   <h2 className="section-title mb-4">Artists</h2>
                   <div className="flex flex-wrap gap-2">
-                    {results.artists.map(({ name, songs }) => (
+                    {localResults.artists.map(({ name, songs }) => (
                       <motion.button key={name} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
                         onClick={() => playQueue(songs)}
-                        className="flex items-center gap-2.5 bg-vs-elevated hover:bg-vs-hover rounded-full px-4 py-2 transition-colors"
-                      >
+                        className="flex items-center gap-2.5 bg-vs-elevated hover:bg-vs-hover rounded-full px-4 py-2 transition-colors">
                         <Mic2 className="h-4 w-4 text-vs-green" />
                         <span className="text-sm font-semibold text-vs-white">{name}</span>
                       </motion.button>
@@ -137,27 +209,51 @@ function SearchContent() {
                 </section>
               )}
 
+              {/* No results */}
+              {mergedSongs.length === 0 && !searchingDb && (
+                <div className="text-center py-20">
+                  <Music2 className="h-12 w-12 text-vs-gray mx-auto mb-4" />
+                  <p className="text-vs-white font-bold text-xl">
+                    No results for &quot;{debouncedQ}&quot;
+                  </p>
+                  <p className="text-vs-gray text-sm mt-1">
+                    Check the spelling or try different keywords.
+                  </p>
+                </div>
+              )}
+
               {/* Songs */}
-              {results.songs.length > 0 && (
+              {mergedSongs.length > 0 && (
                 <section>
-                  <h2 className="section-title mb-4">Songs <span className="text-vs-gray font-normal text-base">({results.songs.length})</span></h2>
+                  <h2 className="section-title mb-4">
+                    Songs{' '}
+                    <span className="text-vs-gray font-normal text-base">
+                      ({mergedSongs.length})
+                      {searchingDb && <span className="ml-2 text-xs">searching…</span>}
+                    </span>
+                  </h2>
                   <div className="space-y-1">
-                    {results.songs.map((song, i) => (
-                      <SongRow key={song.id} song={song} queue={results.songs} index={i} showAlbum />
+                    {mergedSongs.map((song, i) => (
+                      <SongRow key={song.id} song={song} queue={mergedSongs} index={i} showAlbum />
                     ))}
                   </div>
                 </section>
               )}
             </motion.div>
           ) : (
-            <motion.div key="browse" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
+            <motion.div key="browse" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="space-y-8">
+
               {/* History */}
               {history.length > 0 && (
                 <section>
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="section-title">Recent searches</h2>
-                    <button onClick={() => { setHistory([]); localStorage.removeItem('vs-search-history'); }}
-                      className="text-xs text-vs-gray hover:text-vs-white transition-colors">Clear all</button>
+                    <button
+                      onClick={() => { setHistory([]); localStorage.removeItem('vs-search-history'); }}
+                      className="text-xs text-vs-gray hover:text-vs-white transition-colors">
+                      Clear all
+                    </button>
                   </div>
                   <div className="space-y-1">
                     {history.map((item) => (
@@ -184,7 +280,7 @@ function SearchContent() {
                 </div>
                 <div className="space-y-1">
                   {allSongs.slice(0, 8).map((song, i) => (
-                    <SongRow key={song.id} song={song} queue={allSongs} index={i} showAlbum />
+                    <SongRow key={song.id} song={song} queue={allSongs.slice(0, 8)} index={i} showAlbum />
                   ))}
                 </div>
               </section>
@@ -195,7 +291,7 @@ function SearchContent() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                   {GENRE_CARDS.map(({ label, color, icon }) => {
                     const genreSongs = allSongs.filter((s) =>
-                      s.genre.toLowerCase().includes(label.toLowerCase().split(' ')[0].toLowerCase()) ||
+                      (s.genre ?? '').toLowerCase().includes(label.toLowerCase().split(' ')[0].toLowerCase()) ||
                       (label === 'Tamil Hits' && s.language === 'Tamil')
                     );
                     return (

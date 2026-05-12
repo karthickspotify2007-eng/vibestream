@@ -1,7 +1,7 @@
 'use client';
 
-import {} from 'react';
-import { Play, Pause, Heart, Plus, MoreHorizontal, Music2, Mic2, Disc3 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Play, Pause, Heart, Plus, Music2, Mic2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import TopBar from '@/components/layout/TopBar';
@@ -10,14 +10,35 @@ import DynamicBackground from '@/components/ui/DynamicBackground';
 import { usePlayerStore } from '@/store/playerStore';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useUIStore } from '@/store/uiStore';
-import { songs as allSongs } from '@/data/songs';
+import { songs as staticSongs } from '@/data/songs';
+import { getSongById, getSongs } from '@/lib/songService';
+import { isSupabaseConfigured } from '@/lib/supabase';
+import type { Song } from '@/types';
 
 export default function SongPage({ params }: { params: { id: string } }) {
   const { id } = params;
-  const song = allSongs.find((s) => s.id === id);
   const { playSong, currentSong, isPlaying, togglePlay } = usePlayerStore();
   const { toggleLike, isLiked } = useLibraryStore();
   const { openAddToPlaylist } = useUIStore();
+
+  const [song, setSong] = useState<Song | null>(
+    staticSongs.find((s) => s.id === id) ?? null
+  );
+  const [allSongs, setAllSongs] = useState<Song[]>(staticSongs);
+
+  // Try to load from Supabase (merges with static)
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    // Load all songs for the queue
+    getSongs().then((dbSongs) => {
+      const ids = new Set(dbSongs.map((s) => s.id));
+      setAllSongs([...dbSongs, ...staticSongs.filter((s) => !ids.has(s.id))]);
+    }).catch(() => {});
+    // Load this specific song from DB
+    getSongById(id).then((dbSong) => {
+      if (dbSong) setSong(dbSong);
+    }).catch(() => {});
+  }, [id]);
 
   if (!song) {
     return (
@@ -28,9 +49,11 @@ export default function SongPage({ params }: { params: { id: string } }) {
     );
   }
 
-  const isActive = currentSong?.id === song.id;
-  const liked = isLiked(song.id);
-  const sameSongs = allSongs.filter((s) => s.artist === song.artist && s.id !== song.id).slice(0, 8);
+  const isActive  = currentSong?.id === song.id;
+  const liked     = isLiked(song.id);
+  const sameSongs = allSongs
+    .filter((s) => s.artist === song.artist && s.id !== song.id)
+    .slice(0, 8);
 
   return (
     <div className="fade-up min-h-screen relative">
@@ -55,12 +78,15 @@ export default function SongPage({ params }: { params: { id: string } }) {
                 <p className="text-[10px] text-vs-white/70 uppercase tracking-widest font-semibold mb-2">Song</p>
                 <h1 className="text-4xl sm:text-5xl font-black text-vs-white mb-2 leading-tight">{song.title}</h1>
                 <p className="text-lg text-vs-gray font-semibold">{song.artist}</p>
-                <p className="text-sm text-vs-gray mt-1">{song.album} · {song.year} · {song.genre}</p>
+                <p className="text-sm text-vs-gray mt-1">
+                  {[song.album, String(song.year), song.genre].filter(Boolean).join(' · ')}
+                </p>
 
                 {/* Pills */}
                 <div className="flex flex-wrap gap-2 mt-4 justify-center sm:justify-start">
                   {[song.language, song.genre].filter(Boolean).map((tag) => (
-                    <span key={tag} className="px-3 py-1 rounded-full text-xs font-semibold bg-white/10 text-vs-gray">
+                    <span key={tag}
+                      className="px-3 py-1 rounded-full text-xs font-semibold bg-white/10 text-vs-gray">
                       {tag}
                     </span>
                   ))}
@@ -119,12 +145,12 @@ export default function SongPage({ params }: { params: { id: string } }) {
           <h3 className="font-bold text-vs-white mb-3">Credits</h3>
           <div className="space-y-2">
             {[
-              { label: 'Artist', value: song.artist },
-              { label: 'Album', value: song.album },
-              { label: 'Genre', value: song.genre },
-              { label: 'Year', value: String(song.year) },
+              { label: 'Artist',   value: song.artist },
+              { label: 'Album',    value: song.album },
+              { label: 'Genre',    value: song.genre },
+              { label: 'Year',     value: String(song.year) },
               { label: 'Language', value: song.language },
-            ].map(({ label, value }) => (
+            ].filter(({ value }) => value).map(({ label, value }) => (
               <div key={label} className="flex items-center gap-4">
                 <span className="text-xs text-vs-gray uppercase tracking-wider font-semibold w-20">{label}</span>
                 <span className="text-sm text-vs-white">{value}</span>

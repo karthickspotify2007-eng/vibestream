@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { usePlayerStore } from '@/store/playerStore';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useMediaSession } from '@/hooks/useMediaSession';
+import { addRecentlyPlayed as addRecentlyPlayedToDb } from '@/lib/songService';
 
 export default function AudioEngine() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -90,7 +91,8 @@ export default function AudioEngine() {
           setBuffering(true);
           await audio.play();
           if (!cancelled) {
-            addRecentlyPlayed(currentSong);
+            addRecentlyPlayed(currentSong);                           // Zustand local store
+            addRecentlyPlayedToDb(currentSong.id).catch(() => {});   // Supabase DB (fire-and-forget)
           }
         } else {
           audio.pause();

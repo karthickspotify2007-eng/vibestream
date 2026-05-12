@@ -10,6 +10,7 @@ import ServiceWorkerRegister from '@/components/ServiceWorkerRegister';
 import ToastProvider from '@/components/ui/Toast';
 import AddToPlaylistModal from '@/components/modals/AddToPlaylistModal';
 import CreatePlaylistModal from '@/components/modals/CreatePlaylistModal';
+import UploadSongModal from '@/components/modals/UploadSongModal';
 
 export const metadata: Metadata = {
   title: { default: 'Vibestream', template: '%s | Vibestream' },
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <QueuePanel />
         <AddToPlaylistModal />
         <CreatePlaylistModal />
+        <UploadSongModal />
         <ToastProvider />
 
         {/* App shell */}

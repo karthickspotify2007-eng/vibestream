@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  Home, Search, Library, Plus, ChevronRight,
-  Heart, Music2, FolderOpen, Disc3, Pencil, Trash2
+  Home, Search, Library, Plus,
+  Heart, Music2, FolderOpen, Upload, Pencil, Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
@@ -35,7 +35,7 @@ export default function LeftLibrary() {
   const pathname = usePathname();
   const router = useRouter();
   const { playlists, likedSongs, localSongs, createPlaylist, deletePlaylist, renamePlaylist } = useLibraryStore();
-  const { openCreatePlaylist } = useUIStore();
+  const { openCreatePlaylist, openUploadSong } = useUIStore();
   const { playQueue } = usePlayerStore();
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -97,7 +97,8 @@ export default function LeftLibrary() {
                     className="absolute right-0 top-full mt-1 w-52 bg-[#282828] rounded-xl shadow-2xl z-50 overflow-hidden"
                   >
                     {[
-                      { label: 'Create playlist', icon: Plus, onClick: () => { openCreatePlaylist(); setShowCreateMenu(false); } },
+                      { label: 'Upload song',      icon: Upload,    onClick: () => { openUploadSong();   setShowCreateMenu(false); } },
+                      { label: 'Create playlist',  icon: Plus,      onClick: () => { openCreatePlaylist(); setShowCreateMenu(false); } },
                       { label: 'Import local songs', icon: FolderOpen, onClick: () => { router.push('/local-songs'); setShowCreateMenu(false); } },
                     ].map(({ label, icon: Icon, onClick }) => (
                       <button

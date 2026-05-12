@@ -15,6 +15,7 @@ interface UIStore {
   modalSong: Song | null;   // song to add when opening addToPlaylist modal
   openAddToPlaylist: (song: Song) => void;
   openCreatePlaylist: (song?: Song) => void;
+  openUploadSong: () => void;
   closeModal: () => void;
 }
 
@@ -36,5 +37,6 @@ export const useUIStore = create<UIStore>()((set, get) => ({
 
   openAddToPlaylist: (song) => set({ modal: 'addToPlaylist', modalSong: song }),
   openCreatePlaylist: (song) => set({ modal: 'createPlaylist', modalSong: song ?? null }),
+  openUploadSong: () => set({ modal: 'uploadSong', modalSong: null }),
   closeModal: () => set({ modal: null, modalSong: null }),
 }));

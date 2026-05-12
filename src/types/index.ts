@@ -121,4 +121,4 @@ export type Genre = {
   imageUrl: string;
 };
 
-export type ModalType = 'addToPlaylist' | 'createPlaylist' | null;
+export type ModalType = 'addToPlaylist' | 'createPlaylist' | 'uploadSong' | null;

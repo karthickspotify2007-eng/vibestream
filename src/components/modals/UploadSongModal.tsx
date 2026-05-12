@@ -136,15 +136,17 @@ export default function UploadSongModal() {
             className="fixed inset-0 bg-black/75 z-[100] backdrop-blur-sm"
           />
 
+          {/* Centering wrapper — full screen flex so modal never overflows */}
+          <div className="fixed inset-0 z-[101] flex items-center justify-center p-4 pointer-events-none">
           {/* Modal */}
           <motion.div
             initial={{ opacity: 0, scale: 0.94, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.94, y: 16 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101]
-                       w-full max-w-md bg-[#181818] rounded-2xl shadow-2xl overflow-hidden
-                       max-h-[90vh] flex flex-col"
+            className="pointer-events-auto w-full max-w-md bg-[#181818] rounded-2xl shadow-2xl
+                       flex flex-col"
+            style={{ maxHeight: 'min(88vh, 680px)' }}
           >
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-5 border-b border-white/8 shrink-0">
@@ -174,8 +176,9 @@ export default function UploadSongModal() {
               </div>
             )}
 
-            {/* Form */}
-            <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
+            {/* Form — scrollable middle section */}
+            <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-6 py-4 space-y-3.5
+              [scrollbar-width:thin] [scrollbar-color:#333_transparent]">
 
               {/* Cover + basic info row */}
               <div className="flex gap-4 items-start">
@@ -343,6 +346,8 @@ export default function UploadSongModal() {
               </div>
             </div>
           </motion.div>
+
+          </div>{/* end centering wrapper */}
 
           {/* Scoped styles */}
           <style jsx global>{`

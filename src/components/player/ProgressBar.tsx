@@ -1,48 +1,72 @@
 'use client';
 
-import { ChangeEvent } from 'react';
-import { formatTime } from '@/store/playerStore';
+import { useState, useCallback } from 'react';
+import { usePlayerStore } from '@/store/playerStore';
+import { formatTime } from '@/lib/utils';
 
-type ProgressBarProps = {
-  currentTime: number;
-  duration: number;
-  isBuffering: boolean;
-  onSeek: (time: number) => void;
-};
+export default function ProgressBar({ compact = false }: { compact?: boolean }) {
+  const { currentTime, duration, seek, isBuffering } = usePlayerStore();
+  const [dragging, setDragging] = useState(false);
+  const [dragVal, setDragVal]   = useState(0);
 
-export default function ProgressBar({ currentTime, duration, isBuffering, onSeek }: ProgressBarProps) {
-  const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
-  const safeCurrentTime = Math.min(Math.max(currentTime, 0), safeDuration || currentTime);
-  const progress = safeDuration > 0 ? (safeCurrentTime / safeDuration) * 100 : 0;
+  const pct = duration > 0 ? ((dragging ? dragVal : currentTime) / duration) * 100 : 0;
 
-  const handleSeek = (event: ChangeEvent<HTMLInputElement>) => {
-    onSeek(Number(event.currentTarget.value));
-  };
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = Number(e.target.value);
+    setDragging(true);
+    setDragVal(v);
+  }, []);
+
+  const handleRelease = useCallback((e: React.MouseEvent<HTMLInputElement> | React.TouchEvent<HTMLInputElement>) => {
+    seek(Number((e.target as HTMLInputElement).value));
+    setDragging(false);
+  }, [seek]);
+
+  if (compact) {
+    return (
+      <div className="w-full h-1 bg-vs-hover rounded-full overflow-hidden">
+        <div
+          className="h-full bg-vs-green rounded-full transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full min-w-0">
-      <div className="mb-1.5 flex items-center justify-between text-[11px] font-medium text-white/55">
-        <span>{formatTime(safeCurrentTime)}</span>
-        <span className="text-aqua-300/80">{isBuffering ? 'Buffering' : formatTime(safeDuration)}</span>
+    <div className="flex items-center gap-2 w-full group">
+      <span className="text-[11px] text-vs-gray tabular-nums w-8 text-right">
+        {formatTime(currentTime)}
+      </span>
+      <div className="relative flex-1 flex items-center h-4">
+        <div className="absolute inset-x-0 h-1 bg-vs-hover rounded-full">
+          <div
+            className="absolute h-full bg-vs-green rounded-full transition-none"
+            style={{ width: `${pct}%` }}
+          />
+          {isBuffering && (
+            <div className="absolute h-full bg-vs-green/30 rounded-full animate-pulse w-full" />
+          )}
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={duration || 0}
+          step={0.1}
+          value={dragging ? dragVal : currentTime}
+          onChange={handleChange}
+          onMouseUp={handleRelease}
+          onTouchEnd={handleRelease}
+          disabled={!duration}
+          className="vs-range absolute inset-0 opacity-0 group-hover:opacity-100 h-4"
+          style={{
+            background: `linear-gradient(90deg, #1DB954 ${pct}%, #535353 ${pct}%)`,
+          }}
+        />
       </div>
-
-      <label className="sr-only" htmlFor="vibestream-progress">
-        Seek audio position
-      </label>
-      <input
-        id="vibestream-progress"
-        type="range"
-        min="0"
-        max={safeDuration || 0}
-        step="0.1"
-        value={safeDuration ? safeCurrentTime : 0}
-        onChange={handleSeek}
-        disabled={!safeDuration}
-        className="vibestream-range h-2 w-full cursor-pointer appearance-none rounded-full outline-none disabled:cursor-not-allowed disabled:opacity-45"
-        style={{
-          background: `linear-gradient(90deg, #25d9c3 ${progress}%, rgba(255,255,255,0.14) ${progress}%)`,
-        }}
-      />
+      <span className="text-[11px] text-vs-gray tabular-nums w-8">
+        {formatTime(duration)}
+      </span>
     </div>
   );
 }

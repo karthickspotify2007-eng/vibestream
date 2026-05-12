@@ -1,566 +1,294 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
-import { songs as defaultSongs } from '@/data/songs';
-import type { NewSongInput, PlayerState, RepeatMode, Song } from '@/types/music';
-
-const CUSTOM_SONGS_KEY = 'vibestream.customSongs.v1';
-const REMOVED_SONG_IDS_KEY = 'vibestream.removedSongIds.v1';
-const CUSTOM_SONGS_EVENT = 'vibestream:custom-songs-changed';
-export const AUDIO_LINK_ERROR_MESSAGE = 'This audio link cannot be played.';
-
-type Listener = () => void;
-type PlayerSnapshot = PlayerState & {
-  currentTrack: Song | null;
-  currentIndex: number;
-};
-
-const listeners = new Set<Listener>();
-
-const clamp = (value: number, min: number, max: number) => {
-  return Math.min(Math.max(value, min), max);
-};
-
-export const formatTime = (seconds: number) => {
-  if (!Number.isFinite(seconds) || seconds <= 0) {
-    return '0:00';
-  }
-
-  const roundedSeconds = Math.floor(seconds);
-  const minutes = Math.floor(roundedSeconds / 60);
-  const remainingSeconds = roundedSeconds % 60;
-
-  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-};
-
-export const durationToSeconds = (duration: string) => {
-  const parts = duration
-    .split(':')
-    .map((part) => Number(part.trim()))
-    .filter((part) => Number.isFinite(part));
-
-  if (parts.length === 2) {
-    return parts[0] * 60 + parts[1];
-  }
-
-  if (parts.length === 3) {
-    return parts[0] * 3600 + parts[1] * 60 + parts[2];
-  }
-
-  return 0;
-};
-
-const sanitizeText = (value: string, fallback: string) => {
-  const normalizedValue = value.trim();
-  return normalizedValue.length > 0 ? normalizedValue : fallback;
-};
-
-const normalizeSong = (song: Song): Song => ({
-  id: sanitizeText(song.id, `song-${Date.now()}`),
-  title: sanitizeText(song.title, 'Untitled Song'),
-  artist: sanitizeText(song.artist, 'Unknown Artist'),
-  album: sanitizeText(song.album, 'Single'),
-  coverUrl: sanitizeText(song.coverUrl, ''),
-  audioUrl: sanitizeText(song.audioUrl, ''),
-  duration: sanitizeText(song.duration, '0:00'),
-  genre: sanitizeText(song.genre, 'Other'),
-  language: sanitizeText(song.language, 'Unknown'),
-  year: Number.isFinite(song.year) ? Number(song.year) : new Date().getFullYear(),
-});
-
-const isSong = (value: unknown): value is Song => {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const candidate = value as Record<string, unknown>;
-
-  return (
-    typeof candidate.id === 'string' &&
-    typeof candidate.title === 'string' &&
-    typeof candidate.artist === 'string' &&
-    typeof candidate.album === 'string' &&
-    typeof candidate.coverUrl === 'string' &&
-    typeof candidate.audioUrl === 'string' &&
-    typeof candidate.duration === 'string' &&
-    typeof candidate.genre === 'string' &&
-    typeof candidate.language === 'string' &&
-    typeof candidate.year === 'number'
-  );
-};
-
-export const isExternalUrl = (value: string) => {
-  try {
-    const parsedUrl = new URL(value.trim());
-    return ['http:', 'https:', 'blob:', 'data:'].includes(parsedUrl.protocol);
-  } catch {
-    return false;
-  }
-};
-
-export const isPlaceholderAudioUrl = (value: string) => {
-  const normalizedValue = value.trim().toUpperCase();
-
-  return (
-    normalizedValue.length === 0 ||
-    normalizedValue.includes('PASTE_MY_CLOUD_AUDIO_LINK_HERE') ||
-    normalizedValue.includes('PASTE_CLOUD_MP3_LINK_HERE')
-  );
-};
-
-export const readCustomSongs = (): Song[] => {
-  if (typeof window === 'undefined') {
-    return [];
-  }
-
-  try {
-    const rawSongs = window.localStorage.getItem(CUSTOM_SONGS_KEY);
-
-    if (!rawSongs) {
-      return [];
-    }
-
-    const parsedSongs = JSON.parse(rawSongs) as unknown;
-
-    if (!Array.isArray(parsedSongs)) {
-      return [];
-    }
-
-    return parsedSongs.filter(isSong).map(normalizeSong);
-  } catch {
-    return [];
-  }
-};
-
-export const readRemovedSongIds = (): Set<string> => {
-  if (typeof window === 'undefined') {
-    return new Set();
-  }
-
-  try {
-    const rawSongIds = window.localStorage.getItem(REMOVED_SONG_IDS_KEY);
-
-    if (!rawSongIds) {
-      return new Set();
-    }
-
-    const parsedSongIds = JSON.parse(rawSongIds) as unknown;
-
-    if (!Array.isArray(parsedSongIds)) {
-      return new Set();
-    }
-
-    return new Set(parsedSongIds.filter((songId): songId is string => typeof songId === 'string'));
-  } catch {
-    return new Set();
-  }
-};
-
-const emitSongLibraryChanged = () => {
-  window.dispatchEvent(new Event(CUSTOM_SONGS_EVENT));
-};
-
-const writeCustomSongs = (songsToSave: Song[]) => {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  window.localStorage.setItem(CUSTOM_SONGS_KEY, JSON.stringify(songsToSave.map(normalizeSong)));
-  emitSongLibraryChanged();
-};
-
-const writeRemovedSongIds = (songIds: Iterable<string>) => {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  window.localStorage.setItem(REMOVED_SONG_IDS_KEY, JSON.stringify(Array.from(new Set(songIds))));
-  emitSongLibraryChanged();
-};
-
-export const getMergedSongs = () => {
-  const seenIds = new Set<string>();
-  const removedSongIds = readRemovedSongIds();
-
-  return [...defaultSongs, ...readCustomSongs()]
-    .map(normalizeSong)
-    .filter((song) => {
-      if (removedSongIds.has(song.id)) {
-        return false;
-      }
-
-      if (seenIds.has(song.id)) {
-        return false;
-      }
-
-      seenIds.add(song.id);
-      return true;
-    });
-};
-
-export const addCustomSong = (input: NewSongInput) => {
-  const year = Number(input.year);
-  const newSong: Song = normalizeSong({
-    id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    title: input.title,
-    artist: input.artist,
-    album: input.album,
-    coverUrl: input.coverUrl,
-    audioUrl: input.audioUrl,
-    duration: input.duration?.trim() || '0:00',
-    genre: input.genre,
-    language: input.language,
-    year: Number.isFinite(year) ? year : new Date().getFullYear(),
-  });
-
-  writeCustomSongs([...readCustomSongs(), newSong]);
-  playerActions.hydrateSongs();
-
-  return newSong;
-};
-
-export const removeSong = (songId: string): 'custom' | 'default' | null => {
-  const customSongs = readCustomSongs();
-  const isCustomSong = customSongs.some((song) => song.id === songId);
-  const isDefaultSong = defaultSongs.some((song) => song.id === songId);
-  const wasCurrentTrack = state.currentTrackId === songId;
-
-  if (isCustomSong) {
-    writeCustomSongs(customSongs.filter((song) => song.id !== songId));
-  } else if (isDefaultSong) {
-    writeRemovedSongIds([...Array.from(readRemovedSongIds()), songId]);
-  } else {
-    return null;
-  }
-
-  playerActions.hydrateSongs();
-
-  if (wasCurrentTrack) {
-    const nextSong = state.songs[0] ?? null;
-    setPlayerState({
-      currentTrackId: nextSong?.id ?? null,
-      isPlaying: false,
-      isBuffering: false,
-      currentTime: 0,
-      duration: nextSong ? durationToSeconds(nextSong.duration) : 0,
-      errorMessage: null,
-      toastMessage: null,
-    });
-  }
-
-  return isCustomSong ? 'custom' : 'default';
-};
-
-let state: PlayerState = {
-  songs: defaultSongs,
-  currentTrackId: defaultSongs[0]?.id ?? null,
-  isPlaying: false,
-  isBuffering: false,
-  currentTime: 0,
-  duration: durationToSeconds(defaultSongs[0]?.duration ?? '0:00'),
-  volume: 0.72,
-  isMuted: false,
-  repeatMode: 'off',
-  shuffle: false,
-  errorMessage: null,
-  toastMessage: null,
-  playbackRequestId: 0,
-};
-
-const emit = () => {
-  listeners.forEach((listener) => listener());
-};
-
-const setPlayerState = (patch: Partial<PlayerState> | ((currentState: PlayerState) => Partial<PlayerState>)) => {
-  const nextPatch = typeof patch === 'function' ? patch(state) : patch;
-  state = { ...state, ...nextPatch };
-  emit();
-};
-
-const getCurrentIndex = () => {
-  return state.songs.findIndex((song) => song.id === state.currentTrackId);
-};
-
-const getCurrentTrack = () => {
-  return state.songs.find((song) => song.id === state.currentTrackId) ?? null;
-};
-
-const getNextIndex = (direction: 1 | -1) => {
-  if (state.songs.length === 0) {
-    return -1;
-  }
-
-  const currentIndex = Math.max(getCurrentIndex(), 0);
-
-  if (state.shuffle && state.songs.length > 1) {
-    let randomIndex = currentIndex;
-
-    while (randomIndex === currentIndex) {
-      randomIndex = Math.floor(Math.random() * state.songs.length);
-    }
-
-    return randomIndex;
-  }
-
-  return (currentIndex + direction + state.songs.length) % state.songs.length;
-};
-
-let cachedState: PlayerState | null = null;
-let cachedSnapshot: PlayerSnapshot | null = null;
-
-const getSnapshot = (): PlayerSnapshot => {
-  if (cachedSnapshot && cachedState === state) {
-    return cachedSnapshot;
-  }
-
-  cachedState = state;
-  cachedSnapshot = {
-    ...state,
-    currentTrack: getCurrentTrack(),
-    currentIndex: getCurrentIndex(),
-  };
-
-  return cachedSnapshot;
-};
-
-const subscribe = (listener: Listener) => {
-  listeners.add(listener);
-
-  return () => {
-    listeners.delete(listener);
-  };
-};
-
-let storageSyncStarted = false;
-
-export const startSongStorageSync = () => {
-  if (typeof window === 'undefined') {
-    return () => undefined;
-  }
-
-  playerActions.hydrateSongs();
-
-  if (storageSyncStarted) {
-    return () => undefined;
-  }
-
-  const handleSongsChanged = () => {
-    playerActions.hydrateSongs();
-  };
-
-  const handleStorage = (event: StorageEvent) => {
-    if (event.key === CUSTOM_SONGS_KEY || event.key === REMOVED_SONG_IDS_KEY) {
-      playerActions.hydrateSongs();
-    }
-  };
-
-  window.addEventListener(CUSTOM_SONGS_EVENT, handleSongsChanged);
-  window.addEventListener('storage', handleStorage);
-  storageSyncStarted = true;
-
-  return () => {
-    window.removeEventListener(CUSTOM_SONGS_EVENT, handleSongsChanged);
-    window.removeEventListener('storage', handleStorage);
-    storageSyncStarted = false;
-  };
-};
-
-export const playerActions = {
-  hydrateSongs() {
-    const mergedSongs = getMergedSongs();
-    const currentTrackStillExists = mergedSongs.some((song) => song.id === state.currentTrackId);
-    const nextTrack = currentTrackStillExists ? state.currentTrackId : mergedSongs[0]?.id ?? null;
-    const nextSong = mergedSongs.find((song) => song.id === nextTrack) ?? null;
-
-    setPlayerState({
-      songs: mergedSongs,
-      currentTrackId: nextTrack,
-      duration: nextSong ? durationToSeconds(nextSong.duration) : 0,
-    });
-  },
-
-  selectTrack(songId: string, shouldPlay = true) {
-    const selectedSong = state.songs.find((song) => song.id === songId);
-
-    if (!selectedSong) {
-      return;
-    }
-
-    setPlayerState((currentState) => ({
-      currentTrackId: songId,
-      isPlaying: shouldPlay,
-      isBuffering: shouldPlay,
-      currentTime: 0,
-      duration: durationToSeconds(selectedSong.duration),
-      errorMessage: null,
-      toastMessage: null,
-      playbackRequestId: shouldPlay
-        ? currentState.playbackRequestId + 1
-        : currentState.playbackRequestId,
-    }));
-  },
-
-  play() {
-    if (!state.currentTrackId && state.songs[0]) {
-      this.selectTrack(state.songs[0].id, true);
-      return;
-    }
-
-    if (!state.currentTrackId) {
-      setPlayerState({
+import { create } from 'zustand';
+import { persist, subscribeWithSelector } from 'zustand/middleware';
+import type { Song, RepeatMode } from '@/types';
+import { shuffleArray, durationToSeconds } from '@/lib/utils';
+
+interface PlayerStore {
+  currentSong: Song | null;
+  queue: Song[];
+  history: Song[];
+  queueIndex: number;
+  isPlaying: boolean;
+  isBuffering: boolean;
+  currentTime: number;
+  duration: number;
+  volume: number;
+  isMuted: boolean;
+  repeatMode: RepeatMode;
+  shuffle: boolean;
+  showQueue: boolean;
+  showFullscreen: boolean;
+  showMiniPlayer: boolean;
+  playbackRequestId: number;
+  errorMessage: string | null;
+
+  playSong: (song: Song, queue?: Song[]) => void;
+  playQueue: (songs: Song[], startIndex?: number) => void;
+  togglePlay: () => void;
+  play: () => void;
+  pause: () => void;
+  next: () => void;
+  previous: () => void;
+  seek: (time: number) => void;
+  setVolume: (v: number) => void;
+  toggleMute: () => void;
+  toggleShuffle: () => void;
+  cycleRepeat: () => void;
+  setCurrentTime: (t: number) => void;
+  setDuration: (d: number) => void;
+  setBuffering: (b: boolean) => void;
+  setPlaying: (p: boolean) => void;
+  setError: (msg: string | null) => void;
+  addToQueue: (song: Song) => void;
+  removeFromQueue: (index: number) => void;
+  clearQueue: () => void;
+  jumpTo: (index: number) => void;
+  toggleQueue: () => void;
+  toggleFullscreen: () => void;
+  handleEnded: () => void;
+}
+
+export const usePlayerStore = create<PlayerStore>()(
+  subscribeWithSelector(
+    persist(
+      (set, get) => ({
+        currentSong: null,
+        queue: [],
+        history: [],
+        queueIndex: -1,
         isPlaying: false,
         isBuffering: false,
-      });
-      return;
-    }
-
-    setPlayerState((currentState) => ({
-      isPlaying: true,
-      isBuffering: true,
-      errorMessage: null,
-      toastMessage: null,
-      playbackRequestId: currentState.playbackRequestId + 1,
-    }));
-  },
-
-  pause() {
-    setPlayerState({
-      isPlaying: false,
-      isBuffering: false,
-    });
-  },
-
-  togglePlay() {
-    if (state.isPlaying) {
-      this.pause();
-      return;
-    }
-
-    this.play();
-  },
-
-  next(shouldPlay = true) {
-    const nextIndex = getNextIndex(1);
-
-    if (nextIndex < 0) {
-      return;
-    }
-
-    this.selectTrack(state.songs[nextIndex].id, shouldPlay);
-  },
-
-  previous(shouldPlay = true) {
-    const previousIndex = getNextIndex(-1);
-
-    if (previousIndex < 0) {
-      return;
-    }
-
-    this.selectTrack(state.songs[previousIndex].id, shouldPlay);
-  },
-
-  handleEnded() {
-    if (state.repeatMode === 'one') {
-      setPlayerState((currentState) => ({
         currentTime: 0,
-        isPlaying: true,
-        isBuffering: true,
-        playbackRequestId: currentState.playbackRequestId + 1,
-      }));
-      return;
-    }
+        duration: 0,
+        volume: 0.8,
+        isMuted: false,
+        repeatMode: 'off',
+        shuffle: false,
+        showQueue: false,
+        showFullscreen: false,
+        showMiniPlayer: true,
+        playbackRequestId: 0,
+        errorMessage: null,
 
-    const currentIndex = getCurrentIndex();
-    const shouldMoveForward = state.repeatMode === 'all' || state.shuffle || currentIndex < state.songs.length - 1;
+        playSong: (song, queue) => {
+          const q = queue ?? [song];
+          const idx = q.findIndex((s) => s.id === song.id);
+          set((s) => ({
+            currentSong: song,
+            queue: q,
+            queueIndex: idx >= 0 ? idx : 0,
+            isPlaying: true,
+            isBuffering: true,
+            currentTime: 0,
+            duration: durationToSeconds(song.duration),
+            errorMessage: null,
+            playbackRequestId: s.playbackRequestId + 1,
+            history: s.currentSong
+              ? [s.currentSong, ...s.history.slice(0, 49)]
+              : s.history,
+          }));
+        },
 
-    if (shouldMoveForward) {
-      this.next(true);
-      return;
-    }
+        playQueue: (songs, startIndex = 0) => {
+          const song = songs[startIndex];
+          if (!song) return;
+          set((s) => ({
+            currentSong: song,
+            queue: songs,
+            queueIndex: startIndex,
+            isPlaying: true,
+            isBuffering: true,
+            currentTime: 0,
+            duration: durationToSeconds(song.duration),
+            errorMessage: null,
+            playbackRequestId: s.playbackRequestId + 1,
+          }));
+        },
 
-    setPlayerState({
-      isPlaying: false,
-      isBuffering: false,
-      currentTime: 0,
-    });
-  },
+        togglePlay: () => {
+          const { isPlaying, currentSong, queue } = get();
+          if (!currentSong && queue.length > 0) {
+            get().playQueue(queue, 0);
+            return;
+          }
+          set((s) => ({
+            isPlaying: !isPlaying,
+            playbackRequestId: !isPlaying ? s.playbackRequestId + 1 : s.playbackRequestId,
+          }));
+        },
 
-  seek(time: number) {
-    setPlayerState({
-      currentTime: clamp(time, 0, Math.max(state.duration, time)),
-    });
-  },
+        play: () => set((s) => ({
+          isPlaying: true,
+          playbackRequestId: s.playbackRequestId + 1,
+        })),
 
-  setDuration(duration: number) {
-    if (!Number.isFinite(duration) || duration <= 0) {
-      return;
-    }
+        pause: () => set({ isPlaying: false, isBuffering: false }),
 
-    setPlayerState({ duration });
-  },
+        next: () => {
+          const { queue, queueIndex, shuffle, repeatMode } = get();
+          if (queue.length === 0) return;
 
-  setCurrentTime(time: number) {
-    if (!Number.isFinite(time)) {
-      return;
-    }
+          if (repeatMode === 'one') {
+            set((s) => ({
+              currentTime: 0,
+              isPlaying: true,
+              isBuffering: true,
+              playbackRequestId: s.playbackRequestId + 1,
+            }));
+            return;
+          }
 
-    setPlayerState({ currentTime: Math.max(0, time) });
-  },
+          let nextIdx: number;
+          if (shuffle) {
+            let r = queueIndex;
+            while (r === queueIndex && queue.length > 1) {
+              r = Math.floor(Math.random() * queue.length);
+            }
+            nextIdx = r;
+          } else {
+            nextIdx = queueIndex + 1;
+          }
 
-  setBuffering(isBuffering: boolean) {
-    setPlayerState({ isBuffering });
-  },
+          if (nextIdx >= queue.length) {
+            if (repeatMode === 'all') nextIdx = 0;
+            else {
+              set({ isPlaying: false, isBuffering: false, currentTime: 0 });
+              return;
+            }
+          }
 
-  setAudioReady() {
-    setPlayerState({
-      isBuffering: false,
-      errorMessage: null,
-    });
-  },
+          const song = queue[nextIdx];
+          set((s) => ({
+            currentSong: song,
+            queueIndex: nextIdx,
+            isPlaying: true,
+            isBuffering: true,
+            currentTime: 0,
+            duration: durationToSeconds(song.duration),
+            errorMessage: null,
+            playbackRequestId: s.playbackRequestId + 1,
+            history: s.currentSong
+              ? [s.currentSong, ...s.history.slice(0, 49)]
+              : s.history,
+          }));
+        },
 
-  setAudioError(message = AUDIO_LINK_ERROR_MESSAGE) {
-    setPlayerState({
-      isPlaying: false,
-      isBuffering: false,
-      errorMessage: message,
-      toastMessage: message,
-    });
-  },
+        previous: () => {
+          const { queue, queueIndex, currentTime } = get();
+          if (currentTime > 3) {
+            set((s) => ({
+              currentTime: 0,
+              playbackRequestId: s.playbackRequestId + 1,
+            }));
+            return;
+          }
+          const prevIdx = Math.max(0, queueIndex - 1);
+          const song = queue[prevIdx];
+          if (!song) return;
+          set((s) => ({
+            currentSong: song,
+            queueIndex: prevIdx,
+            isPlaying: true,
+            isBuffering: true,
+            currentTime: 0,
+            duration: durationToSeconds(song.duration),
+            errorMessage: null,
+            playbackRequestId: s.playbackRequestId + 1,
+          }));
+        },
 
-  clearToast() {
-    setPlayerState({ toastMessage: null });
-  },
+        seek: (time) => set({ currentTime: Math.max(0, time) }),
 
-  setVolume(volume: number) {
-    const nextVolume = clamp(volume, 0, 1);
+        setVolume: (v) => set({ volume: Math.min(1, Math.max(0, v)), isMuted: v === 0 }),
 
-    setPlayerState({
-      volume: nextVolume,
-      isMuted: nextVolume === 0,
-    });
-  },
+        toggleMute: () => set((s) => ({ isMuted: !s.isMuted })),
 
-  toggleMute() {
-    setPlayerState((currentState) => ({
-      isMuted: !currentState.isMuted,
-    }));
-  },
+        toggleShuffle: () => {
+          const { shuffle, queue, queueIndex } = get();
+          if (!shuffle && queue.length > 0) {
+            const current = queue[queueIndex];
+            const rest = queue.filter((_, i) => i !== queueIndex);
+            const shuffled = shuffleArray(rest);
+            const newQueue = current ? [current, ...shuffled] : shuffled;
+            set({ shuffle: true, queue: newQueue, queueIndex: 0 });
+          } else {
+            set({ shuffle: false });
+          }
+        },
 
-  cycleRepeatMode() {
-    const modes: RepeatMode[] = ['off', 'all', 'one'];
-    const currentModeIndex = modes.indexOf(state.repeatMode);
-    const nextMode = modes[(currentModeIndex + 1) % modes.length];
+        cycleRepeat: () => {
+          const modes: RepeatMode[] = ['off', 'all', 'one'];
+          const { repeatMode } = get();
+          const next = modes[(modes.indexOf(repeatMode) + 1) % modes.length];
+          set({ repeatMode: next });
+        },
 
-    setPlayerState({ repeatMode: nextMode });
-  },
+        setCurrentTime: (t) => set({ currentTime: t }),
+        setDuration: (d) => set({ duration: d }),
+        setBuffering: (b) => set({ isBuffering: b }),
+        setPlaying: (p) => set({ isPlaying: p }),
+        setError: (msg) => set({ errorMessage: msg, isPlaying: false, isBuffering: false }),
 
-  toggleShuffle() {
-    setPlayerState((currentState) => ({
-      shuffle: !currentState.shuffle,
-    }));
-  },
-};
+        addToQueue: (song) => set((s) => ({ queue: [...s.queue, song] })),
 
-export const usePlayerStore = () => {
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-};
+        removeFromQueue: (index) =>
+          set((s) => {
+            const q = s.queue.filter((_, i) => i !== index);
+            const newIdx = index <= s.queueIndex
+              ? Math.max(0, s.queueIndex - 1)
+              : s.queueIndex;
+            return { queue: q, queueIndex: newIdx };
+          }),
+
+        clearQueue: () => set({ queue: [], queueIndex: -1, currentSong: null, isPlaying: false }),
+
+        jumpTo: (index) => {
+          const { queue } = get();
+          const song = queue[index];
+          if (!song) return;
+          set((s) => ({
+            currentSong: song,
+            queueIndex: index,
+            isPlaying: true,
+            isBuffering: true,
+            currentTime: 0,
+            duration: durationToSeconds(song.duration),
+            errorMessage: null,
+            playbackRequestId: s.playbackRequestId + 1,
+          }));
+        },
+
+        toggleQueue: () => set((s) => ({ showQueue: !s.showQueue })),
+        toggleFullscreen: () => set((s) => ({ showFullscreen: !s.showFullscreen })),
+
+        handleEnded: () => {
+          const { repeatMode } = get();
+          if (repeatMode === 'one') {
+            set((s) => ({
+              currentTime: 0,
+              isPlaying: true,
+              isBuffering: true,
+              playbackRequestId: s.playbackRequestId + 1,
+            }));
+          } else {
+            get().next();
+          }
+        },
+      }),
+      {
+        name: 'vibestream-player',
+        partialize: (s) => ({
+          volume: s.volume,
+          isMuted: s.isMuted,
+          repeatMode: s.repeatMode,
+          shuffle: s.shuffle,
+          queue: s.queue,
+          queueIndex: s.queueIndex,
+          currentSong: s.currentSong,
+        }),
+      }
+    )
+  )
+);

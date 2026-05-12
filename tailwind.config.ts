@@ -6,37 +6,43 @@ const config: Config = {
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/data/**/*.{js,ts,jsx,tsx,mdx}',
     './src/store/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/hooks/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {
       colors: {
-        ink: {
-          950: '#070809',
-          900: '#0d1011',
-          850: '#121617',
-          800: '#171d1f',
+        vs: {
+          black:   '#000000',
+          surface: '#121212',
+          elevated:'#1a1a1a',
+          hover:   '#282828',
+          border:  '#2a2a2a',
+          green:   '#1DB954',
+          'green-light': '#1ed760',
+          white:   '#ffffff',
+          gray:    '#a7a7a7',
+          'gray-dark': '#535353',
+          red:     '#e91429',
+          blue:    '#0d72ea',
         },
-        aqua: {
-          300: '#69f0df',
-          400: '#25d9c3',
-          500: '#11bba7',
-        },
-        ember: {
-          300: '#ffd28a',
-          400: '#f5a949',
-          500: '#de7b28',
-        },
-        berry: {
-          400: '#ff6f91',
-          500: '#e24c73',
-        },
-      },
-      boxShadow: {
-        player: '0 24px 80px rgba(0, 0, 0, 0.48)',
-        glow: '0 0 34px rgba(37, 217, 195, 0.28)',
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+      },
+      boxShadow: {
+        player: '0 -2px 40px rgba(0,0,0,0.7)',
+        card:   '0 8px 24px rgba(0,0,0,0.5)',
+        green:  '0 0 24px rgba(29,185,84,0.35)',
+      },
+      animation: {
+        'spin-slow': 'spin 8s linear infinite',
+        'pulse-green': 'pulse 2s cubic-bezier(0.4,0,0.6,1) infinite',
+      },
+      backgroundImage: {
+        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+      },
+      screens: {
+        xs: '400px',
       },
     },
   },

@@ -1,240 +1,187 @@
 'use client';
 
-import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
-import { playerActions, startSongStorageSync, usePlayerStore } from '@/store/playerStore';
-import type { Song } from '@/types/music';
+import { useMemo } from 'react';
+import { Play, TrendingUp, Clock, Music2 } from 'lucide-react';
+import { motion } from 'framer-motion';
+import Image from 'next/image';
+import TopBar from '@/components/layout/TopBar';
+import SongCard from '@/components/cards/SongCard';
+import { usePlayerStore } from '@/store/playerStore';
+import { useLibraryStore } from '@/store/libraryStore';
+import { songs as allSongs } from '@/data/songs';
+import type { Song } from '@/types';
 
-const allFilter = 'All';
+const GREETINGS = ['Good morning', 'Good afternoon', 'Good evening'];
+const greeting = GREETINGS[Math.min(2, Math.floor(new Date().getHours() / 8))];
 
-const uniqueOptions = (songs: Song[], key: keyof Pick<Song, 'genre' | 'language'>) => {
-  return [allFilter, ...Array.from(new Set(songs.map((song) => song[key]).filter(Boolean))).sort()];
-};
+function SectionHeader({ title, icon: Icon }: { title: string; icon: React.ElementType }) {
+  return (
+    <div className="flex items-center gap-2 mb-4">
+      <Icon className="h-5 w-5 text-vs-green" />
+      <h2 className="text-xl font-black text-vs-white">{title}</h2>
+    </div>
+  );
+}
 
-export default function Home() {
-  const { songs, currentTrack, isPlaying } = usePlayerStore();
-  const [query, setQuery] = useState('');
-  const [genre, setGenre] = useState(allFilter);
-  const [language, setLanguage] = useState(allFilter);
-
-  useEffect(() => {
-    return startSongStorageSync();
-  }, []);
-
-  const genres = useMemo(() => uniqueOptions(songs, 'genre'), [songs]);
-  const languages = useMemo(() => uniqueOptions(songs, 'language'), [songs]);
-
-  const filteredSongs = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-
-    return songs.filter((song) => {
-      const matchesQuery =
-        normalizedQuery.length === 0 ||
-        [song.title, song.artist, song.album, song.genre, song.language]
-          .join(' ')
-          .toLowerCase()
-          .includes(normalizedQuery);
-      const matchesGenre = genre === allFilter || song.genre === genre;
-      const matchesLanguage = language === allFilter || song.language === language;
-
-      return matchesQuery && matchesGenre && matchesLanguage;
-    });
-  }, [genre, language, query, songs]);
+function QuickPlayCard({ song, queue }: { song: Song; queue: Song[] }) {
+  const { playSong, currentSong, isPlaying } = usePlayerStore();
+  const active = currentSong?.id === song.id;
 
   return (
-    <main className="min-h-screen overflow-x-hidden px-4 pb-48 pt-5 text-white sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <header className="flex flex-col gap-4 rounded-[8px] border border-white/10 bg-ink-950/45 px-4 py-4 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between sm:px-5">
-          <Link href="/" className="group flex items-center gap-3">
-            <span className="grid h-11 w-11 place-items-center rounded-[8px] bg-aqua-400 font-black text-ink-950 shadow-glow">
-              VS
-            </span>
-            <span>
-              <span className="block text-lg font-black tracking-wide">VibeStream</span>
-              <span className="block text-xs text-white/45">External link music library</span>
-            </span>
-          </Link>
+    <motion.button
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      onClick={() => playSong(song, queue)}
+      className="flex items-center gap-3 bg-vs-elevated hover:bg-vs-hover rounded-lg overflow-hidden group transition-colors w-full text-left"
+    >
+      <div className="relative h-16 w-16 shrink-0">
+        <Image src={song.coverUrl} alt={song.title} fill className="object-cover" unoptimized />
+      </div>
+      <span className="font-bold text-sm text-vs-white truncate flex-1 pr-2">
+        {song.title}
+      </span>
+      <div className="mr-3 h-9 w-9 rounded-full bg-vs-green grid place-items-center shadow-green opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        <Play className="h-4 w-4 text-vs-black fill-vs-black ml-0.5" />
+      </div>
+    </motion.button>
+  );
+}
 
-          <nav className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/"
-              className="rounded-full border border-aqua-300/35 bg-aqua-300/10 px-4 py-2 text-sm font-semibold text-aqua-300"
+export default function Home() {
+  const { playQueue } = usePlayerStore();
+  const { recentlyPlayed, likedSongs } = useLibraryStore();
+
+  const tamilSongs  = useMemo(() => allSongs.filter((s) => s.language === 'Tamil'), []);
+  const otherSongs  = useMemo(() => allSongs.filter((s) => s.language !== 'Tamil'), []);
+  const featured    = allSongs.slice(0, 6);
+  const trending    = useMemo(() => [...allSongs].sort(() => Math.random() - 0.5).slice(0, 8), []);
+  const recent      = recentlyPlayed.length > 0 ? recentlyPlayed.slice(0, 6) : allSongs.slice(4, 10);
+
+  // Genre sections
+  const genres = useMemo(() => {
+    const map: Record<string, Song[]> = {};
+    allSongs.forEach((s) => {
+      if (!map[s.genre]) map[s.genre] = [];
+      map[s.genre].push(s);
+    });
+    return Object.entries(map).filter(([, songs]) => songs.length >= 2).slice(0, 4);
+  }, []);
+
+  const GENRE_COLORS: Record<string, string> = {
+    Tamil:         'from-rose-800  to-pink-900',
+    'Tamil Folk':  'from-amber-800 to-orange-900',
+    Electronic:    'from-blue-800  to-indigo-900',
+    Chill:         'from-teal-800  to-cyan-900',
+    Fusion:        'from-purple-800 to-fuchsia-900',
+    'Lo-Fi':       'from-slate-700  to-gray-900',
+  };
+
+  return (
+    <div className="fade-up">
+      {/* ── Hero ────────────────────────────────────────── */}
+      <div className="bg-hero px-6 pt-4">
+        <TopBar />
+        <div className="py-6">
+          <h1 className="text-3xl font-black text-vs-white">{greeting} 👋</h1>
+          <p className="text-vs-gray mt-1 text-sm">What do you want to listen to?</p>
+        </div>
+
+        {/* Quick play grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pb-8">
+          {featured.map((song) => (
+            <QuickPlayCard key={song.id} song={song} queue={featured} />
+          ))}
+        </div>
+      </div>
+
+      <div className="px-6 space-y-10 pb-8">
+        {/* ── Recently Played ───────────────────────────── */}
+        <section>
+          <SectionHeader title="Recently Played" icon={Clock} />
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+            {recent.map((song) => (
+              <SongCard key={song.id} song={song} queue={recent} />
+            ))}
+          </div>
+        </section>
+
+        {/* ── Trending ──────────────────────────────────── */}
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-vs-green" />
+              <h2 className="text-xl font-black text-vs-white">Trending Now</h2>
+            </div>
+            <button
+              onClick={() => playQueue(trending)}
+              className="flex items-center gap-1.5 text-sm text-vs-green hover:text-vs-green-light font-semibold transition-colors"
             >
-              Library
-            </Link>
-            <Link
-              href="/manage-songs"
-              className="rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-sm font-semibold text-white/75 transition hover:border-ember-300/50 hover:text-ember-300"
-            >
-              Manage Songs
-            </Link>
-          </nav>
-        </header>
+              <Play className="h-4 w-4 fill-current" /> Play all
+            </button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+            {trending.slice(0, 6).map((song) => (
+              <SongCard key={song.id} song={song} queue={trending} />
+            ))}
+          </div>
+        </section>
 
-        <section className="mt-8 grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="glass-panel rounded-[8px] p-5 sm:p-7">
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-aqua-300">
-              Original cloud audio player
-            </p>
-            <h1 className="mt-4 max-w-3xl text-4xl font-black leading-tight text-white sm:text-5xl lg:text-6xl">
-              VibeStream turns your external song links into a polished music library.
-            </h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-white/62">
-              Add MP3, WAV, OGG, Claude public artifact audio links, or direct cloud-hosted audio URLs without editing the player every time.
-            </p>
-
-            <div className="mt-7 flex flex-wrap gap-3">
-              <Link
-                href="/manage-songs"
-                className="rounded-full bg-aqua-400 px-5 py-3 text-sm font-black text-ink-950 shadow-glow transition hover:bg-aqua-300"
-              >
-                Add Song Link
-              </Link>
+        {/* ── Tamil Hits ────────────────────────────────── */}
+        {tamilSongs.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Music2 className="h-5 w-5 text-vs-green" />
+                <h2 className="text-xl font-black text-vs-white">Tamil Hits 🎵</h2>
+              </div>
               <button
-                type="button"
-                onClick={() => {
-                  if (songs[0]) {
-                    playerActions.selectTrack(songs[0].id, true);
-                  }
-                }}
-                className="rounded-full border border-white/10 bg-white/[0.06] px-5 py-3 text-sm font-bold text-white/80 transition hover:border-aqua-300/50 hover:text-aqua-300"
+                onClick={() => playQueue(tamilSongs)}
+                className="text-sm text-vs-green hover:text-vs-green-light font-semibold"
               >
-                Play First Track
+                Play all
               </button>
             </div>
-          </div>
-
-          <aside className="glass-panel rounded-[8px] p-5">
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-ember-300">
-              Now selected
-            </p>
-            <div className="mt-5 overflow-hidden rounded-[8px] border border-white/10 bg-black/20">
-              <div className="aspect-square bg-white/[0.04]">
-                {currentTrack?.coverUrl ? (
-                  <img
-                    src={currentTrack.coverUrl}
-                    alt={`${currentTrack.title} cover`}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <div className="grid h-full w-full place-items-center text-4xl font-black text-aqua-300">
-                    VS
-                  </div>
-                )}
-              </div>
-              <div className="p-4">
-                <h2 className="truncate text-2xl font-black">{currentTrack?.title ?? 'No song selected'}</h2>
-                <p className="mt-1 truncate text-sm text-white/55">
-                  {currentTrack ? `${currentTrack.artist} - ${currentTrack.album}` : 'Choose a track from the list'}
-                </p>
-                {currentTrack && (
-                  <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
-                    <span className="rounded-full bg-aqua-300/10 px-3 py-1 text-aqua-300">{currentTrack.genre}</span>
-                    <span className="rounded-full bg-ember-300/10 px-3 py-1 text-ember-300">{currentTrack.language}</span>
-                    <span className="rounded-full bg-white/[0.06] px-3 py-1 text-white/60">{currentTrack.year}</span>
-                    <span className="rounded-full bg-white/[0.06] px-3 py-1 text-white/60">
-                      {isPlaying ? 'Playing' : 'Ready'}
-                    </span>
-                  </div>
-                )}
-              </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+              {tamilSongs.slice(0, 12).map((song) => (
+                <SongCard key={song.id} song={song} queue={tamilSongs} />
+              ))}
             </div>
-          </aside>
-        </section>
+          </section>
+        )}
 
-        <section className="mt-6 glass-panel rounded-[8px] p-4 sm:p-5">
-          <div className="grid gap-3 md:grid-cols-[1fr_180px_180px]">
-            <label className="block">
-              <span className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-white/45">Search</span>
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.currentTarget.value)}
-                placeholder="Search title, artist, album, genre..."
-                className="h-12 w-full rounded-[8px] border border-white/10 bg-ink-900/75 px-4 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-aqua-300/60"
-              />
-            </label>
-
-            <label className="block">
-              <span className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-white/45">Genre</span>
-              <select
-                value={genre}
-                onChange={(event) => setGenre(event.currentTarget.value)}
-                className="h-12 w-full rounded-[8px] border border-white/10 bg-ink-900/75 px-4 text-sm text-white outline-none transition focus:border-aqua-300/60"
+        {/* ── Genre sections ────────────────────────────── */}
+        <section>
+          <SectionHeader title="Browse by Genre" icon={Music2} />
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {genres.map(([genre, songs]) => (
+              <motion.button
+                key={genre}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => playQueue(songs)}
+                className={`relative h-28 rounded-2xl overflow-hidden bg-gradient-to-br ${GENRE_COLORS[genre] ?? 'from-gray-700 to-gray-900'} p-4 text-left`}
               >
-                {genres.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="block">
-              <span className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-white/45">Language</span>
-              <select
-                value={language}
-                onChange={(event) => setLanguage(event.currentTarget.value)}
-                className="h-12 w-full rounded-[8px] border border-white/10 bg-ink-900/75 px-4 text-sm text-white outline-none transition focus:border-aqua-300/60"
-              >
-                {languages.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <p className="font-black text-lg text-vs-white">{genre}</p>
+                <p className="text-sm text-vs-white/70">{songs.length} songs</p>
+                <div className="absolute bottom-0 right-0 h-16 w-16 rounded-tl-2xl bg-white/10" />
+              </motion.button>
+            ))}
           </div>
         </section>
 
-        <section className="mt-6">
-          <div className="mb-3 flex items-end justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-black">Songs</h2>
-              <p className="text-sm text-white/45">{filteredSongs.length} track links available</p>
-            </div>
+        {/* ── All songs ─────────────────────────────────── */}
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-black text-vs-white">All Songs</h2>
+            <span className="text-sm text-vs-gray">{allSongs.length} tracks</span>
           </div>
-
-          <div className="grid gap-3">
-            {filteredSongs.map((song, index) => {
-              const isActive = currentTrack?.id === song.id;
-
-              return (
-                <button
-                  key={song.id}
-                  type="button"
-                  onClick={() => playerActions.selectTrack(song.id, true)}
-                  className={`grid w-full grid-cols-[auto_1fr] items-center gap-3 rounded-[8px] border p-3 text-left transition sm:grid-cols-[46px_64px_minmax(0,1.6fr)_minmax(120px,0.8fr)_100px_92px] ${
-                    isActive
-                      ? 'border-aqua-300/55 bg-aqua-300/10 shadow-glow'
-                      : 'border-white/10 bg-white/[0.045] hover:border-white/20 hover:bg-white/[0.075]'
-                  }`}
-                >
-                  <span className="hidden text-center text-sm font-black text-white/35 sm:block">
-                    {String(index + 1).padStart(2, '0')}
-                  </span>
-                  <span className="h-14 w-14 overflow-hidden rounded-[8px] border border-white/10 bg-white/[0.06]">
-                    <img src={song.coverUrl} alt={`${song.title} cover`} className="h-full w-full object-cover" />
-                  </span>
-
-                  <span className="min-w-0">
-                    <span className="block truncate text-base font-black text-white">{song.title}</span>
-                    <span className="block truncate text-sm text-white/48">{song.artist}</span>
-                  </span>
-
-                  <span className="hidden min-w-0 text-sm text-white/50 sm:block">
-                    <span className="block truncate">{song.album}</span>
-                    <span className="block truncate text-xs text-white/35">{song.genre}</span>
-                  </span>
-
-                  <span className="hidden text-sm font-semibold text-white/45 sm:block">{song.language}</span>
-                  <span className="hidden text-right text-sm font-semibold text-white/45 sm:block">{song.duration}</span>
-                </button>
-              );
-            })}
+          <div className="space-y-1">
+            {allSongs.map((song, i) => (
+              <SongCard key={song.id} song={song} queue={allSongs} index={i} compact showIndex />
+            ))}
           </div>
         </section>
       </div>
-    </main>
+    </div>
   );
 }

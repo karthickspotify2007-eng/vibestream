@@ -17,6 +17,26 @@ export type Song = {
   liked?: boolean;
   plays?: number;
   lyrics?: string;
+  isLocal?: boolean;
+};
+
+export type LocalSong = {
+  id: string;
+  title: string;
+  artist: string;
+  album: string;
+  genre: string;
+  language: string;
+  duration: string;
+  durationSeconds: number;
+  coverUrl: string;        // data URL or placeholder
+  audioUrl: string;        // object URL — recreated each session from IDB blob
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  importedAt: string;
+  isLocal: true;
+  year: number;
 };
 
 export type Album = {
@@ -28,6 +48,8 @@ export type Album = {
   year: number;
   genre: string;
   songs: Song[];
+  description?: string;
+  language?: string;
 };
 
 export type Artist = {
@@ -36,7 +58,9 @@ export type Artist = {
   imageUrl: string;
   bio?: string;
   genres?: string[];
+  monthlyListeners?: number;
   songs?: Song[];
+  albums?: Album[];
 };
 
 export type Playlist = {
@@ -49,6 +73,12 @@ export type Playlist = {
   isPublic?: boolean;
   createdAt?: string;
   songCount?: number;
+};
+
+export type Toast = {
+  id: string;
+  message: string;
+  type: 'success' | 'error' | 'info' | 'warning';
 };
 
 export type PlayerState = {
@@ -74,6 +104,7 @@ export type LibraryState = {
   likedSongs: Song[];
   playlists: Playlist[];
   recentlyPlayed: Song[];
+  localSongs: LocalSong[];
 };
 
 export type SearchResult = {
@@ -89,3 +120,5 @@ export type Genre = {
   color: string;
   imageUrl: string;
 };
+
+export type ModalType = 'addToPlaylist' | 'createPlaylist' | null;

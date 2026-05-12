@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState } from 'react';
+import { useState } from 'react';
 import { Play, Shuffle, Plus, Trash2, Music2, Clock, Pencil, Check } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
@@ -12,8 +12,8 @@ import { usePlayerStore } from '@/store/playerStore';
 import { useLibraryStore } from '@/store/libraryStore';
 import { songs as allSongs } from '@/data/songs';
 
-export default function PlaylistPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function PlaylistPage({ params }: { params: { id: string } }) {
+  const { id } = params;
   const router = useRouter();
   const { playQueue, toggleShuffle } = usePlayerStore();
   const { playlists, addToPlaylist, removeFromPlaylist, deletePlaylist, updatePlaylist } = useLibraryStore();

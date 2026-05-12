@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Play, Shuffle, Clock, Music2 } from 'lucide-react';
 import Image from 'next/image';
 import TopBar from '@/components/layout/TopBar';
@@ -9,8 +9,8 @@ import DynamicBackground from '@/components/ui/DynamicBackground';
 import { usePlayerStore } from '@/store/playerStore';
 import { songs as allSongs } from '@/data/songs';
 
-export default function AlbumPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function AlbumPage({ params }: { params: { id: string } }) {
+  const { id } = params;
   const { playQueue, toggleShuffle } = usePlayerStore();
 
   // Build album from songs data (no external DB required)

@@ -1,6 +1,6 @@
 'use client';
 
-import { use } from 'react';
+import {} from 'react';
 import { Play, Pause, Heart, Plus, MoreHorizontal, Music2, Mic2, Disc3 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
@@ -12,8 +12,8 @@ import { useLibraryStore } from '@/store/libraryStore';
 import { useUIStore } from '@/store/uiStore';
 import { songs as allSongs } from '@/data/songs';
 
-export default function SongPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function SongPage({ params }: { params: { id: string } }) {
+  const { id } = params;
   const song = allSongs.find((s) => s.id === id);
   const { playSong, currentSong, isPlaying, togglePlay } = usePlayerStore();
   const { toggleLike, isLiked } = useLibraryStore();

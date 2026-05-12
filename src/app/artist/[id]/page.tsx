@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Play, Shuffle, Music2 } from 'lucide-react';
 import Image from 'next/image';
 import TopBar from '@/components/layout/TopBar';
@@ -9,8 +9,8 @@ import DynamicBackground from '@/components/ui/DynamicBackground';
 import { usePlayerStore } from '@/store/playerStore';
 import { songs as allSongs } from '@/data/songs';
 
-export default function ArtistPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function ArtistPage({ params }: { params: { id: string } }) {
+  const { id } = params;
   const { playQueue, toggleShuffle } = usePlayerStore();
 
   // Decode id — could be artist name or artist id

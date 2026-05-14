@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Search, X, Bell, Download, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, X, Bell, Download, Sparkles, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePlayerStore } from '@/store/playerStore';
 import { songs as allSongs } from '@/data/songs';
 import { debounce } from '@/lib/utils';
+import { usePwaInstall } from '@/hooks/usePwaInstall';
+import VibeLogo from '@/components/ui/VibeLogo';
 import type { Song } from '@/types';
 
 export default function TopBar({ title }: { title?: string }) {
@@ -17,8 +19,9 @@ export default function TopBar({ title }: { title?: string }) {
   const [results, setResults] = useState<Song[]>([]);
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
+  const wrapRef  = useRef<HTMLDivElement>(null);
   const { playSong } = usePlayerStore();
+  const { canInstall, install, installed } = usePwaInstall();
 
   const doSearch = debounce((q: string) => {
     if (!q.trim()) { setResults([]); return; }
@@ -143,22 +146,41 @@ export default function TopBar({ title }: { title?: string }) {
 
       {/* Right actions */}
       <div className="flex items-center gap-2 shrink-0 ml-auto">
-        <button className="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-vs-white bg-white/10 hover:bg-white/15 rounded-full px-4 py-2 transition-colors">
-          <Sparkles className="h-3.5 w-3.5" />
+        <Link
+          href="/library"
+          className="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-vs-white bg-white/10 hover:bg-white/15 rounded-full px-4 py-2 transition-colors"
+        >
+          <Sparkles className="h-3.5 w-3.5 text-vs-green" />
           Premium
-        </button>
-        <button className="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-vs-white bg-white/10 hover:bg-white/15 rounded-full px-4 py-2 transition-colors">
-          <Download className="h-3.5 w-3.5" />
-          Install
-        </button>
+        </Link>
+
+        {/* PWA install — only shown when browser is ready to install */}
+        <AnimatePresence>
+          {(canInstall || installed) && (
+            <motion.button
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              onClick={!installed ? install : undefined}
+              className={`hidden sm:flex items-center gap-1.5 text-xs font-semibold rounded-full px-4 py-2 transition-colors ${
+                installed
+                  ? 'text-vs-green bg-vs-green/10 cursor-default'
+                  : 'text-vs-white bg-white/10 hover:bg-white/15 cursor-pointer'
+              }`}
+            >
+              {installed
+                ? <><CheckCircle2 className="h-3.5 w-3.5" /> Installed</>
+                : <><Download className="h-3.5 w-3.5" /> Install app</>
+              }
+            </motion.button>
+          )}
+        </AnimatePresence>
+
         <button className="h-8 w-8 rounded-full bg-white/10 flex items-center justify-center text-vs-gray hover:text-white transition-colors">
           <Bell className="h-4 w-4" />
         </button>
-        <Link
-          href="/library"
-          className="h-8 w-8 rounded-full bg-vs-green flex items-center justify-center text-black font-black text-xs hover:bg-vs-green-light transition-colors"
-        >
-          VS
+        <Link href="/library">
+          <VibeLogo size={30} iconOnly />
         </Link>
       </div>
     </div>

@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
-import { Play, TrendingUp, Clock, Music2, ChevronRight, Loader2 } from 'lucide-react';
+import { useMemo, useState, memo, useCallback } from 'react';
+import { Play, TrendingUp, Clock, Music2, ChevronRight, Loader2, ChevronDown } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -28,25 +28,35 @@ const GENRE_COLORS: Record<string, string> = {
   'Classical':   'from-emerald-700 to-green-900',
 };
 
-function QuickPlayCard({ song, queue }: { song: Song; queue: Song[] }) {
+const QuickPlayCard = memo(function QuickPlayCard({ song, queue }: { song: Song; queue: Song[] }) {
   const { playSong } = usePlayerStore();
+  const { isLiked } = useLibraryStore();
+  const { currentSong, isPlaying } = usePlayerStore();
+  const isActive = currentSong?.id === song.id;
+
   return (
     <motion.button
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
+      whileHover={{ scale: 1.015 }}
+      whileTap={{ scale: 0.985 }}
       onClick={() => playSong(song, queue)}
-      className="flex items-center gap-3 bg-[#282828] hover:bg-[#3a3a3a] rounded-md overflow-hidden group transition-colors w-full text-left"
+      className={`flex items-center gap-3 rounded-lg overflow-hidden group transition-all w-full text-left ${
+        isActive ? 'bg-white/15' : 'bg-white/[0.07] hover:bg-white/[0.12]'
+      }`}
     >
-      <div className="relative h-16 w-16 shrink-0">
+      <div className="relative h-14 w-14 shrink-0">
         <Image src={song.coverUrl} alt={song.title} fill className="object-cover" unoptimized />
       </div>
-      <span className="font-bold text-sm text-vs-white truncate flex-1 pr-2">{song.title}</span>
-      <div className="mr-3 h-8 w-8 rounded-full bg-vs-green grid place-items-center shadow-lg opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-        <Play className="h-4 w-4 text-black fill-black ml-0.5" />
+      <span className={`font-bold text-sm truncate flex-1 pr-2 ${isActive ? 'text-vs-green' : 'text-vs-white'}`}>
+        {song.title}
+      </span>
+      <div className={`mr-3 h-8 w-8 rounded-full bg-vs-green grid place-items-center shadow-lg shrink-0 transition-all ${
+        isActive ? 'opacity-100 scale-110' : 'opacity-0 group-hover:opacity-100'
+      }`}>
+        <Play className="h-3.5 w-3.5 text-black fill-black ml-0.5" />
       </div>
     </motion.button>
   );
-}
+});
 
 function SectionHeader({ title, href, icon: Icon }: {
   title: string; href?: string; icon?: React.ElementType;
@@ -67,15 +77,31 @@ function SectionHeader({ title, href, icon: Icon }: {
   );
 }
 
+const ALL_SONGS_PAGE_SIZE = 30;
+
+/** Stable shuffle: deterministic each day, varies daily */
+function stableShuffle<T>(arr: T[], salt = 0): T[] {
+  return [...arr].sort((a: any, b: any) => {
+    const ha = (String(a.id ?? '').split('').reduce((n, c) => n + c.charCodeAt(0), salt)) % 997;
+    const hb = (String(b.id ?? '').split('').reduce((n, c) => n + c.charCodeAt(0), salt)) % 997;
+    return ha - hb;
+  });
+}
+
 export default function Home() {
   const { playQueue } = usePlayerStore();
   const { recentlyPlayed, playlists } = useLibraryStore();
   const { songs: allSongs, dbSongs, isLoading } = useSupabaseSongs();
+  const [allSongsShown, setAllSongsShown] = useState(ALL_SONGS_PAGE_SIZE);
+
+  // stable daily salt so trending list changes day-to-day without causing hydration mismatch
+  const dailySalt = new Date().getDate() + new Date().getMonth() * 31;
 
   const featured   = allSongs.slice(0, 6);
-  const trending   = useMemo(() => [...allSongs].sort(() => Math.random() - 0.5).slice(0, 8), [allSongs]);
+  const trending   = useMemo(() => stableShuffle(allSongs, dailySalt).slice(0, 8), [allSongs]);
   const tamilSongs = useMemo(() => allSongs.filter((s) => s.language === 'Tamil'), [allSongs]);
   const recent     = recentlyPlayed.length > 0 ? recentlyPlayed.slice(0, 6) : allSongs.slice(4, 10);
+  const visibleAll = allSongs.slice(0, allSongsShown);
 
   const genres = useMemo(() => {
     const map: Record<string, Song[]> = {};
@@ -91,12 +117,29 @@ export default function Home() {
       <TopBar />
 
       {/* ── Hero ──────────────────────────────────────── */}
-      <div className="bg-gradient-to-b from-[#535353]/40 to-transparent px-6 pt-6 pb-8">
+      <div className="relative overflow-hidden px-6 pt-6 pb-8">
+        {/* Dynamic blurred cover from first featured song */}
+        {featured[0] && (
+          <div
+            className="absolute inset-0 -z-10 scale-110 opacity-20"
+            style={{
+              backgroundImage:    `url(${featured[0].coverUrl})`,
+              backgroundSize:     'cover',
+              backgroundPosition: 'center',
+              filter:             'blur(50px) saturate(1.6)',
+            }}
+          />
+        )}
+        <div className="absolute inset-0 -z-10 bg-gradient-to-b from-transparent via-black/30 to-vs-surface" />
+
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-black text-vs-white">{greeting} 👋</h1>
+          <div>
+            <h1 className="text-3xl font-black text-vs-white">{greeting} 👋</h1>
+            <p className="text-vs-gray text-sm mt-1">What&apos;s the vibe today?</p>
+          </div>
           {isLoading && (
-            <div className="flex items-center gap-2 text-vs-gray text-xs">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <div className="flex items-center gap-2 text-vs-gray text-xs bg-white/5 rounded-full px-3 py-1.5">
+              <Loader2 className="h-3 w-3 animate-spin" />
               Syncing…
             </div>
           )}
@@ -217,10 +260,21 @@ export default function Home() {
             <span className="text-xs text-vs-gray">{allSongs.length} tracks</span>
           </div>
           <div className="space-y-1">
-            {allSongs.map((song, i) => (
+            {visibleAll.map((song, i) => (
               <SongCard key={song.id} song={song} queue={allSongs} index={i} compact showIndex />
             ))}
           </div>
+          {allSongsShown < allSongs.length && (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setAllSongsShown((n) => n + ALL_SONGS_PAGE_SIZE)}
+              className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-vs-gray hover:text-vs-white text-sm font-semibold transition-all"
+            >
+              <ChevronDown className="h-4 w-4" />
+              Show more ({allSongs.length - allSongsShown} remaining)
+            </motion.button>
+          )}
         </section>
       </div>
     </div>

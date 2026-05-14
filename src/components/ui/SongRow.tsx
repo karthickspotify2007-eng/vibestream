@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Play, Heart, MoreHorizontal, Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
@@ -20,7 +20,7 @@ type Props = {
   showArtist?: boolean;
 };
 
-export default function SongRow({ song, index, queue, showAlbum = false, showArtist = true }: Props) {
+const SongRow = memo(function SongRow({ song, index, queue, showAlbum = false, showArtist = true }: Props) {
   const [hovered, setHovered] = useState(false);
   const { playSong, currentSong, isPlaying } = usePlayerStore();
   const { toggleLike, isLiked } = useLibraryStore();
@@ -99,4 +99,6 @@ export default function SongRow({ song, index, queue, showAlbum = false, showArt
       </div>
     </motion.div>
   );
-}
+});
+
+export default SongRow;

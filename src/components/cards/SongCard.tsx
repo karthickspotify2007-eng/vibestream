@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { memo, useState, useCallback } from 'react';
 import { Play, Heart, Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
@@ -19,7 +19,7 @@ type Props = {
   compact?: boolean;
 };
 
-export default function SongCard({ song, queue, index, showIndex = false, compact = false }: Props) {
+const SongCard = memo(function SongCard({ song, queue, index, showIndex = false, compact = false }: Props) {
   const [hovered, setHovered] = useState(false);
   const { playSong, currentSong, isPlaying } = usePlayerStore();
   const { toggleLike, isLiked } = useLibraryStore();
@@ -111,4 +111,6 @@ export default function SongCard({ song, queue, index, showIndex = false, compac
       </div>
     </motion.div>
   );
-}
+});
+
+export default SongCard;

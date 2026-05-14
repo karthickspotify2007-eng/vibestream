@@ -6,6 +6,7 @@ import {
   Home, Search, Library, Plus,
   Heart, Music2, FolderOpen, Upload, Pencil, Trash2
 } from 'lucide-react';
+import VibeLogo from '@/components/ui/VibeLogo';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -54,11 +55,8 @@ export default function LeftLibrary() {
     <aside className="hidden md:flex flex-col w-[240px] shrink-0 bg-black rounded-r-none h-full overflow-hidden">
       {/* Logo */}
       <div className="px-6 pt-6 pb-2 shrink-0">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="h-9 w-9 rounded-lg bg-vs-green flex items-center justify-center">
-            <Music2 className="h-5 w-5 text-black" />
-          </div>
-          <span className="font-black text-lg text-vs-white tracking-tight">Vibestream</span>
+        <Link href="/" className="inline-flex">
+          <VibeLogo size={34} />
         </Link>
       </div>
 

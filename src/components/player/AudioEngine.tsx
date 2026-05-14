@@ -1,19 +1,22 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { usePlayerStore } from '@/store/playerStore';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useMediaSession } from '@/hooks/useMediaSession';
 import { addRecentlyPlayed as addRecentlyPlayedToDb } from '@/lib/songService';
 
 export default function AudioEngine() {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const lastSrcRef = useRef<string>('');
+  const audioRef    = useRef<HTMLAudioElement | null>(null);
+  const lastSrcRef  = useRef<string>('');
+  /** True while a new track is loading/buffering — prevents the isPlaying effect
+   *  from firing a duplicate audio.play() before the load promise resolves. */
+  const isLoadingRef = useRef(false);
 
   const {
     currentSong, isPlaying, volume, isMuted, currentTime,
-    playbackRequestId, repeatMode,
-    setCurrentTime, setDuration, setBuffering, setPlaying, setError, handleEnded, next,
+    playbackRequestId,
+    setCurrentTime, setDuration, setBuffering, setPlaying, setError, handleEnded,
   } = usePlayerStore();
 
   const { addRecentlyPlayed } = useLibraryStore();
@@ -76,11 +79,16 @@ export default function AudioEngine() {
     if (!src) { setError('No audio URL for this track.'); return; }
 
     let cancelled = false;
+    isLoadingRef.current = true;   // block the isPlaying toggle until we're done
 
     const load = async () => {
       try {
-        if (audio.src !== src || lastSrcRef.current !== src) {
+        // Always stop current playback before switching source to avoid overlap
+        if (!audio.paused) {
           audio.pause();
+        }
+
+        if (lastSrcRef.current !== src) {
           audio.src = src;
           lastSrcRef.current = src;
           audio.load();
@@ -102,18 +110,26 @@ export default function AudioEngine() {
           const e = err as Error;
           if (e.name !== 'AbortError') setError('Playback failed. Try another track.');
         }
+      } finally {
+        if (!cancelled) isLoadingRef.current = false;
       }
     };
 
     void load();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      isLoadingRef.current = false;
+    };
   }, [currentSong?.id, playbackRequestId]);
 
   // ── Play / pause toggle ───────────────────────────────────
+  // Only fires for same-song toggle; skip when load effect is in flight.
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !currentSong) return;
+    if (isLoadingRef.current) return;   // new track is loading — don't double-play
+
     if (isPlaying) {
       audio.play().catch((e) => {
         if ((e as Error).name !== 'AbortError') setError('Playback error.');

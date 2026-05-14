@@ -95,7 +95,7 @@ export default function BottomPlayer() {
     <motion.div
       initial={{ y: 90 }}
       animate={{ y: 0 }}
-      className="fixed bottom-0 left-0 right-0 z-50 h-[90px] bg-[#181818] border-t border-white/10 flex items-center px-4 gap-4"
+      className="fixed bottom-0 left-0 right-0 z-50 h-[90px] glass-player flex items-center px-4 gap-4"
     >
       {/* ── Left: art + info + like ─────────────────── */}
       <div className="flex items-center gap-3 w-[30%] min-w-0">

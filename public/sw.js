@@ -1,5 +1,5 @@
-// Vibestream Service Worker
-const CACHE_NAME = 'vibestream-v1';
+// VibeStream Service Worker v2
+const CACHE_NAME = 'vibestream-v2';
 const STATIC_ASSETS = [
   '/',
   '/search',
@@ -42,14 +42,14 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (request.method !== 'GET') return;
 
-  // Audio files: network only (streaming, too large to cache)
-  if (
+  // Audio files: network only (streaming, range-requests, too large to cache)
+  const isAudioHost =
     url.hostname.includes('cloudinary.com') ||
     url.hostname.includes('res.cloudinary') ||
-    request.url.includes('.mp3') ||
-    request.url.includes('.wav') ||
-    request.url.includes('.ogg')
-  ) {
+    url.hostname.includes('supabase.co') ||
+    url.hostname.includes('supabase.in');
+  const isAudioExt = /\.(mp3|wav|ogg|m4a|flac|aac|opus|webm)(\?|$)/i.test(url.pathname + url.search);
+  if (isAudioHost || isAudioExt) {
     return;
   }
 

@@ -103,6 +103,40 @@ body {
 .eq-bar-3 { animation: eq3 0.90s ease-in-out infinite 0.20s; }
 .eq-bar-4 { animation: eq4 0.75s ease-in-out infinite 0.05s; }
 
+/* ── Vinyl disc rotation ─────────────────────────────── */
+@keyframes disc-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Fullscreen waveform bars ────────────────────────── */
+@keyframes wave-bar {
+  0%, 100% { transform: scaleY(0.25); }
+  50%       { transform: scaleY(1);   }
+}
+.waveform-bar {
+  display:          inline-block;
+  width:            3px;
+  background:       var(--vs-green);
+  border-radius:    3px;
+  transform-origin: bottom center;
+  animation:        wave-bar var(--wave-dur, 0.6s) ease-in-out infinite;
+  animation-delay:  var(--wave-delay, 0s);
+}
+
+/* ── Premium glassmorphism ───────────────────────────── */
+.glass-player {
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(28px) saturate(1.5);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+
+/* ── Neon glow utilities ─────────────────────────────── */
+.glow-green {
+  box-shadow: 0 0 20px rgba(29,185,84,0.35), 0 0 40px rgba(29,185,84,0.15);
+}
+
 /* ── Page animation ─────────────────────────────────── */
 @keyframes fadeUp {
   from { opacity:0; transform:translateY(14px); }

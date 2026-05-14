@@ -47,7 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {/* Main scroll area */}
             <main
               id="main-scroll"
-              className="flex-1 overflow-y-auto bg-vs-surface pb-[90px] md:pb-[90px] mb-16 md:mb-0"
+              className="flex-1 overflow-y-auto bg-vs-surface pb-[160px] md:pb-[90px]"
             >
               {children}
             </main>
